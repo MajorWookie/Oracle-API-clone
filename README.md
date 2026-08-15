@@ -16,6 +16,19 @@ GitHub's 100 MB per-file limit. They are committed minified and gzipped
 instead — a ~30x reduction — and the raw `.json` files are gitignored. The two
 smaller specs are stored as plain JSON so they stay browsable on GitHub.
 
+## MCP servers
+
+[`mcp-servers/`](mcp-servers/) wraps three of these specs — SCM, CX and Common
+Features — as MCP servers for Claude, using a search + execute tool pattern so
+that ~19,700 operations cost ~2,800 tokens of context instead of millions. The
+CPQ spec is not wrapped.
+
+```sh
+cd mcp-servers
+uv run oracle-fusion-build-index   # compile the specs into SQLite indexes
+uv run pytest
+```
+
 ## Reading a spec
 
 Read the compressed specs directly; there is no need to decompress to disk.

@@ -4,11 +4,16 @@
 /REST API for Oracle Fusion Cloud SCM.json
 /REST API for Sales and Fusion Service in Oracle Fusion Cloud Customer Experience.json
 
+# Compiled MCP search indexes — derived from the specs, ~124MB total.
+# Rebuild with: cd mcp-servers && uv run oracle-fusion-build-index
+/mcp-servers/indexes/
+
 # Python
 __pycache__/
 *.py[cod]
 .venv/
 venv/
+.pytest_cache/
 
 # macOS
 .DS_Store

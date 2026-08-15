@@ -8,7 +8,9 @@ Three MCP servers, one per OpenAPI spec in this repo:
 | `oracle-fusion-cx-mcp` | Sales and Fusion Service (CX) | 8,861 | `/crmRestApi/resources/11.13.18.05` |
 | `oracle-fusion-common-mcp` | Common Features | 485 | mixed, see below |
 
-The Oracle CPQ spec is intentionally not wrapped.
+The Oracle CPQ spec is intentionally not wrapped over MCP — it is a different
+product with its own authentication model. It is still compiled to an index
+(`indexes/cpq.db`), because the Postman generator below covers all four specs.
 
 ## Why search + execute, not one tool per endpoint
 
@@ -49,10 +51,13 @@ cd mcp-servers
 uv run oracle-fusion-build-index
 ```
 
-Takes about 5 seconds total and writes `indexes/{scm,cx,common}.db`
-(72 MB, 50 MB, 1.7 MB). The indexes are gitignored; rebuild after refreshing a
-spec. Operation bodies are stored zlib-compressed, which is what keeps the SCM
-index roughly 4x smaller than its source.
+Takes about 5 seconds total and writes `indexes/{scm,cx,common,cpq}.db`
+(72 MB, 50 MB, 1.7 MB, 2.1 MB). The indexes are gitignored; rebuild after
+refreshing a spec. Operation bodies are stored zlib-compressed, which is what
+keeps the SCM index roughly 4x smaller than its source.
+
+CPQ is a Swagger 2.0 document; [`swagger2.py`](src/oracle_fusion_mcp/swagger2.py)
+upconverts it on load so that nothing downstream has to read two dialects.
 
 ### 2. Configure credentials
 
@@ -158,13 +163,37 @@ path only where no API root is present. Roots are recognized by pattern
 (`*Api`, `*UI`) plus a small explicit list, so unfamiliar ones like `fndSetupApi`
 are not double-prefixed.
 
+## Postman collections
+
+The same indexes back a Postman exporter, which writes to
+[`../postman/`](../postman/):
+
+```sh
+uv run oracle-fusion-build-postman              # all four specs
+uv run oracle-fusion-build-postman scm cpq      # a subset
+uv run oracle-fusion-build-postman --max-child-depth 3 --max-mb 8
+```
+
+Folders mirror each spec's own taxonomy — tag category, then root resource.
+Request bodies are materialized from the schemas, since Postman has no `$ref`:
+identical schemas are pooled by content fingerprint, `$ref` cycles are cut with a
+`<recursive: Name>` marker, and expansion stops at depth 3. Collections over
+`--max-mb` are split per category; SCM produces nine, one per functional area.
+
+Operations nested deeper than `--max-child-depth` are omitted and recorded in
+`postman/skipped-operations.tsv`, so the omission is auditable rather than
+silent. Output is deterministic — ids come from `uuid5` of the collection name,
+not a random generator — so regenerating an unchanged spec produces no diff.
+
+See [`postman/README.md`](../postman/README.md) for import instructions.
+
 ## Tests
 
 ```sh
 uv run pytest
 ```
 
-100 tests. Those touching the real indexes skip cleanly if you have not built
+169 tests. Those touching the real indexes skip cleanly if you have not built
 them yet.
 
 ## Known limitations

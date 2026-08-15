@@ -1,2 +1,5 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Compressed specs are binary — never line-ending normalize them.
+*.gz binary

@@ -1,0 +1,14 @@
+# Oversized OpenAPI specs are committed as .json.gz instead — GitHub rejects
+# any file over 100MB and these are 274MB and 180MB pretty-printed.
+# Regenerate the raw files locally with: python3 scripts/unpack_specs.py
+/REST API for Oracle Fusion Cloud SCM.json
+/REST API for Sales and Fusion Service in Oracle Fusion Cloud Customer Experience.json
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# macOS
+.DS_Store

@@ -66,6 +66,12 @@ class SpecDef:
     blurb: str
     """One-line summary used in the server instructions."""
 
+    swagger2: bool = False
+    """True for Swagger 2.0 documents, which are upconverted before indexing."""
+
+    mcp_server: bool = True
+    """False for specs that are indexed but deliberately not exposed over MCP."""
+
     @property
     def env_prefix(self) -> str:
         return f"ORACLE_FUSION_{self.key.upper()}"
@@ -116,5 +122,27 @@ COMMON = SpecDef(
     ),
 )
 
-ALL_SPECS: tuple[SpecDef, ...] = (SCM, CX, COMMON)
+CPQ = SpecDef(
+    key="cpq",
+    server_name="oracle-cpq",
+    spec_filename="REST API Services for Oracle CPQ.json",
+    # CPQ's path keys already carry their own root (`/rest/v19/salesUsers`), so the
+    # base path is recorded for resource derivation but never prepended.
+    default_base_path="/rest/v19",
+    normalize_paths=False,
+    swagger2=True,
+    # Indexed for Postman generation only. The MCP servers deliberately do not
+    # wrap CPQ; it is a different product with its own authentication model.
+    mcp_server=False,
+    blurb=(
+        "Oracle CPQ — commerce transactions, configuration, pricing setup, "
+        "parts and sales company administration."
+    ),
+)
+
+#: Specs exposed as MCP servers, one per `entry.py` console script.
+MCP_SPECS: tuple[SpecDef, ...] = (SCM, CX, COMMON)
+
+#: Every spec in the repo, including the ones only compiled for Postman export.
+ALL_SPECS: tuple[SpecDef, ...] = (SCM, CX, COMMON, CPQ)
 SPECS_BY_KEY: dict[str, SpecDef] = {s.key: s for s in ALL_SPECS}

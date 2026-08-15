@@ -14,11 +14,17 @@ from fastmcp import Client
 
 from oracle_fusion_mcp.config import index_dir, load
 from oracle_fusion_mcp.index import SpecIndex
-from oracle_fusion_mcp.paths import has_api_root
+from oracle_fusion_mcp.paths import contains_base_path, has_api_root
 from oracle_fusion_mcp.server import create_server
-from oracle_fusion_mcp.specs import ALL_SPECS, COMMON, CX, SCM, SpecDef
+from oracle_fusion_mcp.specs import ALL_SPECS, SpecDef
 
 pytestmark = pytest.mark.parametrize("definition", ALL_SPECS, ids=[s.key for s in ALL_SPECS])
+
+
+def require_mcp(definition: SpecDef) -> None:
+    """Skip a server-level test for specs that are indexed but not wrapped over MCP."""
+    if not definition.mcp_server:
+        pytest.skip(f"{definition.key} is indexed for Postman export only")
 
 
 def index_for(definition: SpecDef) -> SpecIndex:
@@ -30,7 +36,7 @@ def index_for(definition: SpecDef) -> SpecIndex:
 
 #: The operation counts observed when the indexes were first compiled. A drift
 #: here means a spec was refreshed, not that the code broke.
-EXPECTED_MINIMUMS = {"scm": 10_000, "cx": 8_000, "common": 400}
+EXPECTED_MINIMUMS = {"scm": 10_000, "cx": 8_000, "common": 400, "cpq": 900}
 
 
 def test_index_holds_the_full_catalog(definition: SpecDef) -> None:
@@ -42,7 +48,12 @@ def test_index_holds_the_full_catalog(definition: SpecDef) -> None:
 
 
 def test_every_stored_path_is_absolute_and_rooted(definition: SpecDef) -> None:
-    """No `<servername>` placeholder or bare resource may survive compilation."""
+    """No `<servername>` placeholder or bare resource may survive compilation.
+
+    A path is rooted either by carrying a recognized Oracle API root or by
+    already containing the spec's own base path — CPQ writes `/rest/v19/...`
+    into its path keys, which is a root but not an `*Api` one.
+    """
     index = index_for(definition)
     rows = index._connection.execute("SELECT op_id, path FROM operations").fetchall()
     for row in rows:
@@ -50,7 +61,8 @@ def test_every_stored_path_is_absolute_and_rooted(definition: SpecDef) -> None:
         assert path.startswith("/"), row["op_id"]
         assert "servername" not in path.lower(), row["op_id"]
         assert "<" not in path and "://" not in path, row["op_id"]
-        assert has_api_root(path), f"{row['op_id']} -> {path}"
+        rooted = has_api_root(path) or contains_base_path(path, definition.default_base_path)
+        assert rooted, f"{row['op_id']} -> {path}"
 
 
 def test_no_path_is_double_prefixed(definition: SpecDef) -> None:
@@ -73,9 +85,13 @@ def test_no_path_is_double_prefixed(definition: SpecDef) -> None:
     assert not offenders, offenders[:5]
 
 
+#: A domain term each spec is certain to mention.
+PROBES = {"scm": "inventory", "cx": "opportunity", "common": "user", "cpq": "pricing"}
+
+
 def test_search_finds_a_known_domain_term(definition: SpecDef) -> None:
     index = index_for(definition)
-    probe = {"scm": "inventory", "cx": "opportunity", "common": "user"}[definition.key]
+    probe = PROBES[definition.key]
     operations, total = index.search(probe, limit=5)
     assert total > 0, probe
     assert operations
@@ -83,6 +99,7 @@ def test_search_finds_a_known_domain_term(definition: SpecDef) -> None:
 
 async def test_server_starts_and_lists_its_tools(definition: SpecDef) -> None:
     """The real server must construct and expose its tools without credentials."""
+    require_mcp(definition)
     if not (index_dir() / definition.index_filename).exists():
         pytest.skip("index not built")
     server = create_server(definition, load(definition))
@@ -93,8 +110,9 @@ async def test_server_starts_and_lists_its_tools(definition: SpecDef) -> None:
 
 
 async def test_describe_operation_works_on_a_real_operation(definition: SpecDef) -> None:
+    require_mcp(definition)
     index = index_for(definition)
-    probe = {"scm": "inventory", "cx": "opportunity", "common": "user"}[definition.key]
+    probe = PROBES[definition.key]
     operations, _ = index.search(probe, kind="read", limit=1)
     if not operations:
         pytest.skip("no read operation matched the probe")

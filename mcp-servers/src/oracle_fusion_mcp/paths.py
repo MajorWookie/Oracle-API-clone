@@ -56,6 +56,43 @@ def has_api_root(path: str) -> bool:
     return head in KNOWN_API_ROOTS or bool(_API_ROOT_PATTERN.match(head))
 
 
+def contains_base_path(path: str, base_path: str) -> bool:
+    """True if `base_path` already appears in `path` as a run of whole segments.
+
+    Not a plain substring test: CPQ writes most paths as `/rest/v19/accounts` but
+    four as `/cpq/rest/v19/integrationUsers`, where the base sits one segment in.
+    Both are already rooted and must not be prefixed again.
+    """
+    base_segments = [s for s in base_path.strip("/").split("/") if s]
+    if not base_segments:
+        return False
+    segments = [s for s in path.strip("/").split("/") if s]
+    span = len(base_segments)
+    return any(
+        segments[i : i + span] == base_segments for i in range(len(segments) - span + 1)
+    )
+
+
+def resource_segment(path: str, base_path: str) -> str:
+    """The root resource name in `path` — the first segment after the API base.
+
+    Locating the base run rather than assuming it sits at offset zero keeps the
+    four CPQ paths that carry an extra leading `/cpq` segment from reporting
+    their version number as the resource name.
+    """
+    segments = [s for s in path.strip("/").split("/") if s]
+    if not segments:
+        return ""
+    base_segments = [s for s in base_path.strip("/").split("/") if s]
+    span = len(base_segments)
+    if span:
+        for i in range(len(segments) - span + 1):
+            if segments[i : i + span] == base_segments:
+                tail = segments[i + span :]
+                return tail[0] if tail else segments[-1]
+    return segments[0]
+
+
 def normalize_path(raw: str, default_base_path: str, *, enabled: bool = True) -> str:
     """Return the absolute, host-free request path for a spec path key.
 
@@ -72,9 +109,15 @@ def normalize_path(raw: str, default_base_path: str, *, enabled: bool = True) ->
             path = "/" + path
         path = re.sub(r"/{2,}", "/", path).rstrip("/") or "/"
 
+    # A spec may already write its own base path into its path keys — CPQ's are
+    # `/rest/v19/...`. Prefixing those again would produce `/rest/v19/rest/v19/`.
+    base = default_base_path.rstrip("/")
+    if contains_base_path(path, base):
+        return path
+
     if has_api_root(path):
         return path
-    return f"{default_base_path.rstrip('/')}{path}"
+    return f"{base}{path}"
 
 
 def fill_path_params(path: str, values: dict[str, object]) -> tuple[str, set[str]]:

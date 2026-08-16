@@ -13,7 +13,7 @@ import sqlite3
 import zlib
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 #: Bare FTS5 operators would otherwise be parsed as syntax when a user's search
 #: text happens to contain them.
@@ -173,6 +173,18 @@ class SpecIndex:
             return None
         detail = json.loads(zlib.decompress(row["detail"]))
         return self._row_to_operation(row), detail
+
+    def iter_all(self) -> Iterator[tuple[Operation, dict[str, Any]]]:
+        """Every operation with its full detail, in a stable catalog order.
+
+        Ordered so that a generated artifact is byte-identical between runs.
+        """
+        rows = self._connection.execute(
+            f"SELECT {self._COLUMNS}, detail FROM operations "
+            f"ORDER BY category, resource, path, method"
+        )
+        for row in rows:
+            yield self._row_to_operation(row), json.loads(zlib.decompress(row["detail"]))
 
     def find_similar(self, op_id: str, limit: int = 5) -> list[Operation]:
         """Operations whose ids resemble `op_id`, for 'did you mean' errors."""

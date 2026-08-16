@@ -13,6 +13,7 @@ oracle-fusion-scm-mcp = "oracle_fusion_mcp.entry:run_scm"
 oracle-fusion-cx-mcp = "oracle_fusion_mcp.entry:run_cx"
 oracle-fusion-common-mcp = "oracle_fusion_mcp.entry:run_common"
 oracle-fusion-build-index = "oracle_fusion_mcp.build_index:main"
+oracle-fusion-build-postman = "oracle_fusion_mcp.postman.build_postman:main"
 
 [dependency-groups]
 dev = [

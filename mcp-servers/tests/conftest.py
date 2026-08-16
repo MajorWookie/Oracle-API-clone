@@ -108,6 +108,24 @@ MINI_SPEC: dict[str, Any] = {
                     "Parent": {"$ref": "#/components/schemas/PurchaseOrder"},
                 },
             },
+            # A cycle that expansion actually walks into. The PurchaseOrder pair
+            # above declares `required`, so a required-only body stops before
+            # reaching the loop; neither of these does, which is the Oracle
+            # parent/child shape that makes cycle detection load-bearing.
+            "Bin": {
+                "type": "object",
+                "properties": {
+                    "BinCode": {"type": "string"},
+                    "Contents": {"$ref": "#/components/schemas/BinContent"},
+                },
+            },
+            "BinContent": {
+                "type": "object",
+                "properties": {
+                    "Quantity": {"type": "integer"},
+                    "Bin": {"$ref": "#/components/schemas/Bin"},
+                },
+            },
         }
     },
 }

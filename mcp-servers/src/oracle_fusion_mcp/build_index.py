@@ -15,7 +15,7 @@ Operation and component bodies are stored as zlib-compressed JSON blobs, which
 keeps the SCM index roughly 8x smaller than the raw spec.
 
 Usage:
-    uv run oracle-fusion-build-index            # build all three
+    uv run oracle-fusion-build-index            # build all four
     uv run oracle-fusion-build-index scm cx     # build a subset
 """
 
@@ -31,8 +31,9 @@ import zlib
 from pathlib import Path
 from typing import Any, Iterator
 
-from .paths import normalize_path
+from .paths import normalize_path, resource_segment
 from .specs import ALL_SPECS, SPECS_BY_KEY, SpecDef
+from .swagger2 import upconvert
 
 HTTP_METHODS = ("get", "post", "put", "patch", "delete", "head", "options")
 
@@ -87,11 +88,16 @@ CREATE TABLE components (
 """
 
 
-def load_spec(path: Path) -> dict[str, Any]:
-    """Read a spec from `.json` or `.json.gz` without decompressing to disk."""
+def load_spec(path: Path, *, swagger2: bool = False) -> dict[str, Any]:
+    """Read a spec from `.json` or `.json.gz` without decompressing to disk.
+
+    Swagger 2.0 documents (CPQ) are upconverted on load so every downstream
+    consumer sees OpenAPI 3.
+    """
     opener = gzip.open if path.suffix == ".gz" else open
     with opener(path, "rt", encoding="utf-8") as handle:
-        return json.load(handle)
+        spec = json.load(handle)
+    return upconvert(spec) if swagger2 else spec
 
 
 def pack(obj: Any) -> bytes:
@@ -170,10 +176,7 @@ def iter_operations(spec: dict[str, Any], definition: SpecDef) -> Iterator[dict[
         path = normalize_path(
             raw_path, definition.default_base_path, enabled=definition.normalize_paths
         )
-        # The resource segment is the first path element after the API base.
-        base_len = len(definition.default_base_path.strip("/").split("/"))
-        segments = path.strip("/").split("/")
-        resource = segments[base_len] if len(segments) > base_len else segments[-1]
+        resource = resource_segment(path, definition.default_base_path)
 
         for method in HTTP_METHODS:
             operation = path_item.get(method)
@@ -223,7 +226,7 @@ def build(definition: SpecDef, spec_root: Path, out_dir: Path) -> Path:
 
     started = time.monotonic()
     print(f"[{definition.key}] reading {source.name} ...", flush=True)
-    spec = load_spec(source)
+    spec = load_spec(source, swagger2=definition.swagger2)
 
     connection = sqlite3.connect(staging)
     try:
@@ -337,7 +340,7 @@ def main(argv: list[str] | None = None) -> int:
         "specs",
         nargs="*",
         choices=[s.key for s in ALL_SPECS],
-        help="Which specs to build. Defaults to all three.",
+        help="Which specs to build. Defaults to all four.",
     )
     parser.add_argument(
         "--spec-root",
